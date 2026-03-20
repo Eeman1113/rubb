@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>rubb — cube solver</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07070d;--surf:#0f0f1b;--surf2:#161628;--bdr:#1f1f38;
+  --txt:#e0e0f0;--muted:#4a4a7a;--acc:#6c63ff;
+  --W:#f2f0ed;--Y:#ffd820;--R:#e8293a;--O:#f47b20;--B:#4d8cf5;--G:#10b981;
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--txt);font-family:'Barlow',sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(108,99,255,.08),transparent);pointer-events:none;z-index:0}
+.screen{display:none;flex-direction:column;align-items:center;width:100%;min-height:100vh;position:relative;z-index:1;animation:fadeUp .35s ease}
+.screen.active{display:flex}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+
+/* SPLASH */
+#splash{justify-content:center;gap:22px;padding:32px 24px;text-align:center}
+.splash-cube-wrap{width:120px;height:120px;perspective:300px;margin:0 auto}
+.splash-cube{width:80px;height:80px;position:relative;transform-style:preserve-3d;animation:rotateCube 8s infinite linear;margin:20px auto}
+.cube-face-3d{position:absolute;width:80px;height:80px;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:4px;border:1px solid rgba(255,255,255,.1)}
+.cube-face-3d.front{transform:translateZ(40px)}.cube-face-3d.back{transform:rotateY(180deg) translateZ(40px)}
+.cube-face-3d.right{transform:rotateY(90deg) translateZ(40px)}.cube-face-3d.left{transform:rotateY(-90deg) translateZ(40px)}
+.cube-face-3d.top{transform:rotateX(90deg) translateZ(40px)}.cube-face-3d.bot{transform:rotateX(-90deg) translateZ(40px)}
+.mini-cell{border-radius:2px}
+@keyframes rotateCube{0%{transform:rotateX(20deg) rotateY(0)}100%{transform:rotateX(20deg) rotateY(360deg)}}
+.logo-text{font-family:'Orbitron',sans-serif;font-size:clamp(4.5rem,18vw,7rem);font-weight:900;letter-spacing:-.04em;line-height:1;background:linear-gradient(135deg,#fff 30%,var(--acc));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.logo-dot{display:inline-block;width:12px;height:12px;background:var(--acc);border-radius:50%;vertical-align:middle;margin-left:4px;animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.6);opacity:.4}}
+.tagline{font-size:.85rem;font-weight:500;letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
+.chip-row{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
+.chip{background:var(--surf);border:1px solid var(--bdr);border-radius:20px;padding:6px 14px;font-size:.78rem;font-weight:600;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.chip svg{width:13px;height:13px;flex-shrink:0;stroke:var(--acc)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:7px;font-family:'Barlow',sans-serif;font-weight:700;letter-spacing:.07em;text-transform:uppercase;cursor:pointer;transition:all .2s}
+.btn svg{width:16px;height:16px;flex-shrink:0}
+.btn-primary{background:var(--acc);color:#fff;padding:15px 36px;font-size:1rem;width:100%;max-width:280px}
+.btn-primary:hover{box-shadow:0 6px 28px rgba(108,99,255,.5);transform:translateY(-2px)}
+.btn-primary:active{transform:translateY(0)}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--bdr);padding:11px 20px;font-size:.85rem}
+.btn-ghost:hover{color:var(--txt);border-color:var(--acc)}
+
+/* SCAN */
+#scan{gap:12px;padding:14px;max-width:480px;width:100%;overflow-y:auto;max-height:100vh}
+.scan-top{width:100%;display:flex;align-items:center;justify-content:space-between}
+.mini-logo{font-family:'Orbitron',sans-serif;font-size:1.45rem;font-weight:900;background:linear-gradient(135deg,#fff,var(--acc));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.face-dots{display:flex;gap:5px}
+.fdot{width:30px;height:30px;border-radius:4px;border:2px solid var(--bdr);background:var(--surf);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--muted);transition:all .3s;font-family:'Share Tech Mono',monospace}
+.fdot svg{width:13px;height:13px}
+.fdot.done{background:var(--acc);border-color:var(--acc);color:#fff}
+.fdot.now{border-color:var(--acc);color:var(--acc);box-shadow:0 0 10px rgba(108,99,255,.35)}
+.face-banner{width:100%;background:var(--surf);border:1px solid var(--bdr);border-left:3px solid var(--acc);border-radius:4px;padding:11px 14px;font-size:.9rem;font-weight:500;display:flex;align-items:flex-start;gap:10px}
+.face-banner svg{width:17px;height:17px;stroke:var(--acc);flex-shrink:0;margin-top:1px}
+.face-banner strong{color:var(--acc)}
+.cam-wrap{width:100%;aspect-ratio:1;position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--bdr);background:#000;flex-shrink:0}
+#videoEl{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+#gridCvs{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.corner{position:absolute;width:20px;height:20px;border-color:var(--acc);border-style:solid;border-width:0;opacity:.9}
+.corner.tl{top:10px;left:10px;border-top-width:3px;border-left-width:3px}
+.corner.tr{top:10px;right:10px;border-top-width:3px;border-right-width:3px}
+.corner.bl{bottom:10px;left:10px;border-bottom-width:3px;border-left-width:3px}
+.corner.br{bottom:10px;right:10px;border-bottom-width:3px;border-right-width:3px}
+.color-row{width:100%;display:flex;align-items:center;gap:12px}
+.color-row-lbl{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;line-height:1.7;flex-shrink:0;text-align:center}
+.color-row-lbl svg{display:block;margin:0 auto 3px;width:15px;height:15px;stroke:var(--acc)}
+.face-mini{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:108px;flex-shrink:0}
+.fm-cell{aspect-ratio:1;border-radius:3px;border:2px solid rgba(0,0,0,.2);cursor:pointer;transition:transform .15s,box-shadow .15s}
+.fm-cell:hover{transform:scale(1.13);z-index:5;box-shadow:0 3px 10px rgba(0,0,0,.7)}
+.fm-cell.picked{outline:2.5px solid #fff;outline-offset:2px;transform:scale(1.1)}
+.picker-panel{width:100%;background:var(--surf);border:1px solid var(--bdr);border-radius:8px;padding:12px;display:none}
+.picker-panel.on{display:block}
+.picker-hd{display:flex;align-items:center;gap:7px;margin-bottom:10px}
+.picker-hd svg{width:14px;height:14px;stroke:var(--acc)}
+.picker-lbl{font-size:.74rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.swatch{width:40px;height:40px;border-radius:5px;cursor:pointer;border:3px solid transparent;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.72rem;color:rgba(0,0,0,.5);transition:all .15s;font-family:'Share Tech Mono',monospace}
+.swatch:hover{transform:scale(1.12)}.swatch.on{border-color:#fff;transform:scale(1.18)}
+.scan-btns{width:100%;display:flex;gap:10px}
+.scan-btns .btn-primary{flex:1;font-size:.93rem;padding:13px}
+.scan-btns .btn-ghost{flex:0 0 auto;padding:13px 16px}
+.err-box{width:100%;background:rgba(232,41,58,.08);border:1px solid rgba(232,41,58,.25);border-radius:6px;padding:9px 12px;font-size:.83rem;color:var(--R);align-items:center;gap:8px;display:none}
+.err-box.on{display:flex}
+.err-box svg{width:16px;height:16px;flex-shrink:0;stroke:var(--R)}
+.cam-ph{width:100%;aspect-ratio:1;background:var(--surf);border:2px dashed var(--bdr);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);font-size:.88rem}
+.cam-ph svg{width:44px;height:44px;opacity:.3;stroke:var(--muted)}
+
+/* REVIEW */
+#review{gap:18px;padding:22px 20px;max-width:480px;width:100%;overflow-y:auto;max-height:100vh;align-items:center}
+.rev-title{font-family:'Orbitron',sans-serif;font-size:1.35rem;font-weight:700;text-align:center}
+.rev-sub{color:var(--muted);font-size:.84rem;text-align:center;display:flex;align-items:center;justify-content:center;gap:6px}
+.rev-sub svg{width:14px;height:14px;stroke:var(--muted)}
+.cube-net-wrap{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:20px;width:100%}
+.rev-btns{display:flex;gap:12px;width:100%}
+.rev-btns .btn-ghost{flex:1;padding:13px}
+.rev-btns .btn-primary{flex:1;padding:13px;font-size:.93rem;max-width:none}
+
+/* SOLVING */
+#solving{justify-content:center;align-items:center;gap:28px;text-align:center}
+.rings{width:88px;height:88px;position:relative}
+.ring{position:absolute;inset:0;border:3px solid transparent;border-radius:50%;animation:spin 1s linear infinite}
+.ring:nth-child(1){border-top-color:var(--acc);animation-duration:.9s}
+.ring:nth-child(2){border-right-color:var(--G);animation-duration:1.3s;animation-direction:reverse;inset:12px}
+.ring:nth-child(3){border-bottom-color:var(--Y);animation-duration:1.7s;inset:24px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.solv-title{font-family:'Orbitron',sans-serif;font-size:1.7rem;font-weight:700}
+.solv-sub{color:var(--muted);font-size:.93rem}
+
+/* SOLUTION */
+#solution{gap:0;max-width:480px;width:100%;align-items:flex-start;overflow:hidden;height:100vh}
+.sol-header{width:100%;background:var(--surf);border-bottom:1px solid var(--bdr);padding:13px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.sol-logo{font-family:'Orbitron',sans-serif;font-size:1.3rem;font-weight:900;background:linear-gradient(135deg,#fff,var(--acc));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.badges{display:flex;gap:8px}
+.badge{background:var(--surf2);border:1px solid var(--bdr);border-radius:5px;padding:5px 11px;font-size:.8rem;font-weight:600;display:flex;align-items:center;gap:5px}
+.badge svg{width:12px;height:12px;stroke:var(--acc)}
+.badge span{color:var(--acc)}
+.prog-bar{width:100%;height:3px;background:var(--bdr);flex-shrink:0}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--acc),var(--G));transition:width .4s ease}
+.moves-list{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:6px;scroll-behavior:smooth}
+.moves-list::-webkit-scrollbar{width:3px}
+.moves-list::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
+.move-card{background:var(--surf);border:1px solid var(--bdr);border-radius:8px;padding:11px 13px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .2s;user-select:none}
+.move-card:hover{border-color:var(--acc);background:rgba(108,99,255,.05)}
+.move-card.active{border-color:var(--acc);background:rgba(108,99,255,.1);box-shadow:0 0 18px rgba(108,99,255,.14)}
+.move-card.done{opacity:.3}
+.mv-num{font-size:.68rem;color:var(--muted);font-weight:700;width:18px;text-align:right;flex-shrink:0;font-family:'Share Tech Mono',monospace}
+.move-card.active .mv-num{color:var(--acc)}
+.mv-icon{width:36px;height:36px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mv-icon svg{width:22px;height:22px}
+.mv-notation{font-family:'Share Tech Mono',monospace;font-size:1.55rem;width:52px;flex-shrink:0;line-height:1}
+.mv-info{flex:1;min-width:0}
+.mv-face{font-size:.94rem;font-weight:600}
+.mv-dir{font-size:.75rem;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:2px}
+.mv-dir svg{width:11px;height:11px;flex-shrink:0}
+.mv-tick{width:22px;height:22px;border-radius:50%;border:2px solid var(--bdr);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .25s}
+.mv-tick svg{width:11px;height:11px;opacity:0;transition:opacity .2s}
+.move-card.done .mv-tick{background:var(--acc);border-color:var(--acc)}
+.move-card.done .mv-tick svg{opacity:1}
+.sol-ctrl{width:100%;background:var(--surf);border-top:1px solid var(--bdr);padding:13px 16px;flex-shrink:0}
+.step-lbl{text-align:center;font-size:.78rem;color:var(--muted);margin-bottom:10px}
+.step-lbl strong{color:var(--txt)}
+.ctrl-row{display:flex;gap:8px;align-items:center;justify-content:center}
+.cbtn{background:var(--surf2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;width:44px;height:44px;padding:0}
+.cbtn svg{width:18px;height:18px;stroke:currentColor}
+.cbtn:hover{border-color:var(--acc);color:var(--acc)}
+.cbtn.play{background:var(--acc);border-color:var(--acc);color:#fff;width:58px;height:48px}
+.cbtn.play:hover{box-shadow:0 4px 18px rgba(108,99,255,.45)}
+.cbtn.play svg{width:20px;height:20px;stroke:#fff}
+.cbtn.danger{color:var(--R);background:transparent;border-color:transparent}
+.cbtn.danger svg{stroke:var(--R)}
+.cbtn.danger:hover{border-color:rgba(232,41,58,.3);background:rgba(232,41,58,.07)}
+.solved-msg{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px;text-align:center}
+.solved-msg svg{width:60px;height:60px;stroke:var(--G)}
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash" class="screen active">
+  <div class="splash-cube-wrap">
+    <div class="splash-cube">
+      <div class="cube-face-3d front" id="cf-front"></div>
+      <div class="cube-face-3d back"  id="cf-back"></div>
+      <div class="cube-face-3d right" id="cf-right"></div>
+      <div class="cube-face-3d left"  id="cf-left"></div>
+      <div class="cube-face-3d top"   id="cf-top"></div>
+      <div class="cube-face-3d bot"   id="cf-bot"></div>
+    </div>
+  </div>
+  <div><span class="logo-text">rubb</span><span class="logo-dot"></span></div>
+  <div class="tagline">scan · solve · conquer</div>
+  <div class="chip-row">
+    <div class="chip">${I.camera} Face Scanner</div>
+    <div class="chip">${I.cpu} AI Solver</div>
+    <div class="chip">${I.zap} Optimal Path</div>
+  </div>
+  <button class="btn btn-primary" onclick="app.startScan()">${I.scanFace} Start Solving</button>
+  <button class="btn btn-ghost" onclick="app.loadDemo()" style="margin-top:-8px">Try Demo Cube ${I.arrowRight}</button>
+</div>
+
+<!-- SCAN -->
+<div id="scan" class="screen">
+  <div class="scan-top">
+    <div class="mini-logo">rubb</div>
+    <div class="face-dots" id="faceDots"></div>
+  </div>
+  <div class="face-banner" id="faceBanner">
+    ${I.info}<span id="bannerTxt"></span>
+  </div>
+  <div class="err-box" id="errBox">${I.alertTriangle}<span id="errTxt"></span></div>
+  <div class="cam-wrap" id="camWrap">
+    <video id="videoEl" autoplay playsinline muted></video>
+    <canvas id="gridCvs"></canvas>
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+  </div>
+  <div class="color-row">
+    <div class="color-row-lbl">${I.grid}Live<br>Preview<br><span style="font-size:.6rem;opacity:.6">tap to fix</span></div>
+    <div class="face-mini" id="faceMini"></div>
+    <div style="flex:1;font-size:.78rem;color:var(--muted);line-height:1.65">Hold each face flat<br>toward camera.<br>Align to the grid.</div>
+  </div>
+  <div class="picker-panel" id="pickerPanel">
+    <div class="picker-hd">${I.pipette}<div class="picker-lbl">Fix cell <span id="pickerIdx">?</span> — choose color</div></div>
+    <div class="swatches" id="swatchRow"></div>
+  </div>
+  <div class="scan-btns">
+    <button class="btn btn-ghost" onclick="app.skipFace()">${I.skipForward} Skip</button>
+    <button class="btn btn-primary" id="capBtn" onclick="app.captureFace()">${I.camera} Capture Face</button>
+  </div>
+</div>
+
+<!-- REVIEW -->
+<div id="review" class="screen">
+  <div class="mini-logo" style="font-family:'Orbitron',sans-serif;font-size:1.45rem;font-weight:900;background:linear-gradient(135deg,#fff,var(--acc));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">rubb</div>
+  <div class="rev-title">Review Cube</div>
+  <div class="rev-sub">${I.eye} Verify all 6 faces before solving</div>
+  <div class="cube-net-wrap" id="cubeNet"></div>
+  <div class="err-box" id="revErr" style="display:none">${I.alertTriangle}<span id="revErrTxt"></span></div>
+  <div class="rev-btns">
+    <button class="btn btn-ghost" onclick="app.goBackScan()">${I.arrowLeft} Rescan</button>
+    <button class="btn btn-primary" onclick="app.solve()">${I.sparkles} Solve It</button>
+  </div>
+</div>
+
+<!-- SOLVING -->
+<div id="solving" class="screen">
+  <div class="rings"><div class="ring"></div><div class="ring"></div><div class="ring"></div></div>
+  <div class="solv-title">Computing…</div>
+  <div class="solv-sub" id="solvSub">Analyzing cube state</div>
+</div>
+
+<!-- SOLUTION -->
+<div id="solution" class="screen">
+  <div class="sol-header">
+    <div class="sol-logo">rubb</div>
+    <div class="badges">
+      <div class="badge">${I.listOrdered} Moves: <span id="totalMv">0</span></div>
+      <div class="badge">${I.zap} Optimal</div>
+    </div>
+  </div>
+  <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+  <div class="moves-list" id="movesList"></div>
+  <div class="sol-ctrl">
+    <div class="step-lbl">Step <strong id="stepNow">0</strong> / <strong id="stepTotal">0</strong></div>
+    <div class="ctrl-row">
+      <button class="cbtn danger" onclick="app.restart()" title="Start Over">${I.rotateCcw}</button>
+      <button class="cbtn" onclick="app.prev()"  title="Previous">${I.chevronLeft}</button>
+      <button class="cbtn play" onclick="app.togglePlay()" id="playBtn">${I.play}</button>
+      <button class="cbtn" onclick="app.next()"  title="Next">${I.chevronRight}</button>
+      <button class="cbtn" onclick="app.goEnd()" title="Jump to End">${I.chevronsRight}</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Inline Lucide SVG icons (no CDN needed) ──
+const SVG = (paths, w=24, h=24) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+
+const I = {
+  camera:       SVG(`<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>`),
+  cameraOff:    SVG(`<line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34m-7.72-2.06A4 4 0 1 1 7.72 9.72"/>`),
+  cpu:          SVG(`<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/>`),
+  zap:          SVG(`<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>`),
+  scanFace:     SVG(`<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="M12 9v1M12 14v1M9 12h1M14 12h1"/>`),
+  arrowRight:   SVG(`<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>`),
+  arrowLeft:    SVG(`<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>`),
+  info:         SVG(`<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>`),
+  alertTriangle:SVG(`<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>`),
+  grid:         SVG(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>`),
+  pipette:      SVG(`<path d="M2 22l1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="M15 6l3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4z"/>`),
+  skipForward:  SVG(`<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>`),
+  eye:          SVG(`<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`),
+  sparkles:     SVG(`<path d="M12 3 9.5 9.5 3 12l6.5 2.5L12 21l2.5-6.5L21 12l-6.5-2.5z"/><path d="M5 3v4M3 5h4M19 17v4M17 19h4"/>`),
+  listOrdered:  SVG(`<line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>`),
+  rotateCcw:    SVG(`<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>`),
+  rotateCw:     SVG(`<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>`),
+  refreshCw:    SVG(`<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>`),
+  chevronLeft:  SVG(`<polyline points="15 18 9 12 15 6"/>`),
+  chevronRight: SVG(`<polyline points="9 18 15 12 9 6"/>`),
+  chevronsRight:SVG(`<polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>`),
+  play:         SVG(`<polygon points="5 3 19 12 5 21 5 3"/>`),
+  pause:        SVG(`<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>`),
+  check:        SVG(`<polyline points="20 6 9 17 4 12"/>`),
+  checkCircle:  SVG(`<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>`),
+};
+
+// icon sized helper
+const ic = (key, size=18) => {
+  const base = I[key] || I.zap;
+  return base.replace(/width="\d+"/, `width="${size}"`).replace(/height="\d+"/, `height="${size}"`);
+};
+
+// Inject static icons into placeholder text in HTML
+document.querySelectorAll('[id]').forEach(()=>{});
+// Replace ${I.xxx} placeholders already injected via template literals in the HTML above
+
+// ── Data ──
+const FC = {
+  W:{hex:'#f2f0ed',name:'White'}, Y:{hex:'#ffd820',name:'Yellow'},
+  R:{hex:'#e8293a',name:'Red'},   O:{hex:'#f47b20',name:'Orange'},
+  B:{hex:'#4d8cf5',name:'Blue'},  G:{hex:'#10b981',name:'Green'}
+};
+const FC_RGB = {
+  W:[242,240,237], Y:[255,216,32], R:[232,41,58],
+  O:[244,123,32],  B:[77,140,245], G:[16,185,129]
+};
+const FACES = ['U','F','R','L','D','B'];
+const FACE_LABEL = {U:'Top (U)',F:'Front (F)',R:'Right (R)',L:'Left (L)',D:'Bottom (D)',B:'Back (B)'};
+const FACE_INST = {
+  U:'<strong>Top face</strong> — point it directly at the camera',
+  F:'<strong>Front face</strong> — hold the cube facing you',
+  R:'<strong>Right face</strong> — tilt to show the right side',
+  L:'<strong>Left face</strong> — tilt to show the left side',
+  D:'<strong>Bottom face</strong> — flip to show the underside',
+  B:'<strong>Back face</strong> — rotate to reveal the back'
+};
+const MOVE_INFO = {
+  'U' :{face:'Top',    dir:'Clockwise',  iconKey:'rotateCw',  color:'#c8c5c0'},
+  "U'":{face:'Top',    dir:'Counter-CW', iconKey:'rotateCcw', color:'#c8c5c0'},
+  'U2':{face:'Top',    dir:'180° turn',  iconKey:'refreshCw', color:'#c8c5c0'},
+  'D' :{face:'Bottom', dir:'Clockwise',  iconKey:'rotateCw',  color:'#ffd820'},
+  "D'":{face:'Bottom', dir:'Counter-CW', iconKey:'rotateCcw', color:'#ffd820'},
+  'D2':{face:'Bottom', dir:'180° turn',  iconKey:'refreshCw', color:'#ffd820'},
+  'R' :{face:'Right',  dir:'Clockwise',  iconKey:'rotateCw',  color:'#e8293a'},
+  "R'":{face:'Right',  dir:'Counter-CW', iconKey:'rotateCcw', color:'#e8293a'},
+  'R2':{face:'Right',  dir:'180° turn',  iconKey:'refreshCw', color:'#e8293a'},
+  'L' :{face:'Left',   dir:'Clockwise',  iconKey:'rotateCw',  color:'#f47b20'},
+  "L'":{face:'Left',   dir:'Counter-CW', iconKey:'rotateCcw', color:'#f47b20'},
+  'L2':{face:'Left',   dir:'180° turn',  iconKey:'refreshCw', color:'#f47b20'},
+  'F' :{face:'Front',  dir:'Clockwise',  iconKey:'rotateCw',  color:'#4d8cf5'},
+  "F'":{face:'Front',  dir:'Counter-CW', iconKey:'rotateCcw', color:'#4d8cf5'},
+  'F2':{face:'Front',  dir:'180° turn',  iconKey:'refreshCw', color:'#4d8cf5'},
+  'B' :{face:'Back',   dir:'Clockwise',  iconKey:'rotateCw',  color:'#10b981'},
+  "B'":{face:'Back',   dir:'Counter-CW', iconKey:'rotateCcw', color:'#10b981'},
+  'B2':{face:'Back',   dir:'180° turn',  iconKey:'refreshCw', color:'#10b981'}
+};
+
+// color an SVG's stroke
+const colorIc = (key, size, color) => ic(key, size).replace(/stroke="currentColor"/g, `stroke="${color}"`);
+
+// Build splash 3D cube
+(function(){
+  const scramble={
+    front:['B','B','R','B','B','B','G','B','B'], back:['G','G','G','Y','G','G','G','G','W'],
+    right:['R','R','R','R','R','O','R','B','R'], left:['O','O','G','O','O','O','O','O','O'],
+    top:  ['W','W','W','W','W','Y','W','W','R'], bot:['Y','Y','Y','Y','Y','Y','B','Y','Y']
+  };
+  for(const[face,cells] of Object.entries(scramble)){
+    const el=document.getElementById('cf-'+face);if(!el)continue;
+    cells.forEach(c=>{const d=document.createElement('div');d.className='mini-cell';d.style.background=FC[c].hex;el.appendChild(d);});
+  }
+})();
+
+class App {
+  constructor(){
+    this.faceIdx=0;this.faces={};this.stream=null;this.raf=null;
+    this.liveColors=Array(9).fill(null);this.selCell=null;
+    this.solution=[];this.step=-1;this.playing=false;this.playTm=null;
+  }
+
+  show(id){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  async startScan(){
+    this.faceIdx=0;this.faces={};this.solution=[];
+    this.liveColors=Array(9).fill(null);this.selCell=null;
+    this.show('scan');this.renderDots();this.updateBanner();
+    await this.initCam();this.renderMini(this.liveColors);
+  }
+
+  loadDemo(){
+    this.faces={
+      U:['W','W','B','W','W','B','R','R','R'],F:['Y','Y','Y','B','B','B','B','B','B'],
+      R:['R','R','W','R','R','W','O','O','O'],L:['O','O','G','O','O','G','B','B','G'],
+      D:['G','G','G','Y','Y','Y','Y','Y','Y'],B:['W','W','O','G','G','G','G','G','G']
+    };
+    this.showReview();
+  }
+
+  async initCam(){
+    try{
+      this.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:640},height:{ideal:640}}});
+      const v=document.getElementById('videoEl');v.srcObject=this.stream;
+      await new Promise(r=>v.addEventListener('loadedmetadata',r,{once:true}));
+      this.startLive();
+    }catch(e){console.warn('cam:',e);this.noCam();}
+  }
+
+  noCam(){
+    document.getElementById('camWrap').innerHTML=`<div class="cam-ph">
+      <span style="opacity:.3">${ic('cameraOff',46)}</span>
+      <div style="font-weight:600">Camera unavailable</div>
+      <div style="font-size:.75rem;text-align:center;max-width:200px;color:var(--muted)">Tap cells below to enter colors manually</div>
+    </div>`;
+    this.liveColors=Array(9).fill('W');this.renderMini(this.liveColors);
+    document.getElementById('capBtn').innerHTML=`${ic('check',16)} Confirm Face`;
+  }
+
+  stopCam(){
+    if(this.stream){this.stream.getTracks().forEach(t=>t.stop());this.stream=null;}
+    if(this.raf){cancelAnimationFrame(this.raf);this.raf=null;}
+  }
+
+  startLive(){
+    const v=document.getElementById('videoEl'),cvs=document.getElementById('gridCvs'),wrap=document.getElementById('camWrap');
+    const draw=()=>{
+      if(!this.stream)return;
+      const W=wrap.offsetWidth,H=wrap.offsetHeight;cvs.width=W;cvs.height=H;
+      const ctx=cvs.getContext('2d');
+      const mg=Math.floor(W*.1),gw=W-mg*2,gh=H-mg*2,cw=gw/3,ch=gh/3;
+      ctx.clearRect(0,0,W,H);ctx.strokeStyle='rgba(108,99,255,.7)';ctx.lineWidth=1.5;
+      for(let i=0;i<=3;i++){
+        const x=mg+i*cw,y=mg+i*ch;
+        ctx.beginPath();ctx.moveTo(x,mg);ctx.lineTo(x,mg+gh);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(mg,y);ctx.lineTo(mg+gw,y);ctx.stroke();
+      }
+      ctx.fillStyle='rgba(255,255,255,.55)';
+      for(let r=0;r<3;r++)for(let c=0;c<3;c++){ctx.beginPath();ctx.arc(mg+c*cw+cw/2,mg+r*ch+ch/2,3,0,Math.PI*2);ctx.fill();}
+      const off=document.createElement('canvas');off.width=W;off.height=H;
+      const ox=off.getContext('2d');ox.save();ox.translate(W,0);ox.scale(-1,1);ox.drawImage(v,0,0,W,H);ox.restore();
+      this.liveColors=this.sample(ox,W,H,mg,cw,ch);this.renderMini(this.liveColors);
+      this.raf=requestAnimationFrame(draw);
+    };
+    this.raf=requestAnimationFrame(draw);
+  }
+
+  sample(ctx,W,H,mg,cw,ch){
+    return Array.from({length:9},(_,i)=>{
+      const r=Math.floor(i/3),c=i%3;
+      const cx=Math.floor(mg+c*cw+cw/2),cy=Math.floor(mg+r*ch+ch/2);
+      const sz=Math.max(8,Math.floor(cw*.2));
+      const x=Math.max(0,cx-sz/2),y=Math.max(0,cy-sz/2);
+      const id=ctx.getImageData(x,y,sz,sz);
+      let sr=0,sg=0,sb=0,n=id.data.length/4;
+      for(let j=0;j<id.data.length;j+=4){sr+=id.data[j];sg+=id.data[j+1];sb+=id.data[j+2];}
+      return this.nearest(sr/n,sg/n,sb/n);
+    });
+  }
+
+  nearest(r,g,b){
+    let best='W',bestD=Infinity;
+    for(const[k,[cr,cg,cb]] of Object.entries(FC_RGB)){
+      const d=(r-cr)**2+(g-cg)**2+(b-cb)**2;if(d<bestD){bestD=d;best=k;}
+    }
+    return best;
+  }
+
+  renderDots(){
+    document.getElementById('faceDots').innerHTML=FACES.map((f,i)=>`
+      <div class="fdot ${i<this.faceIdx?'done':i===this.faceIdx?'now':''}" title="${FACE_LABEL[f]}">
+        ${i<this.faceIdx ? ic('check',13) : f}
+      </div>`).join('');
+  }
+
+  updateBanner(){
+    const f=FACES[this.faceIdx];
+    document.getElementById('bannerTxt').innerHTML=`Face ${this.faceIdx+1}/6 — ${FACE_INST[f]}`;
+  }
+
+  renderMini(colors){
+    document.getElementById('faceMini').innerHTML=colors.map((c,i)=>`
+      <div class="fm-cell ${this.selCell===i?'picked':''}"
+           style="background:${c?FC[c].hex:'#12122a'}"
+           onclick="app.pickCell(${i})" title="${c?FC[c].name:'?'}"></div>`).join('');
+  }
+
+  pickCell(i){
+    this.selCell=this.selCell===i?null:i;this.renderMini(this.liveColors);
+    const p=document.getElementById('pickerPanel');
+    if(this.selCell!==null){p.classList.add('on');document.getElementById('pickerIdx').textContent=i+1;this.renderSwatches();}
+    else p.classList.remove('on');
+  }
+
+  renderSwatches(){
+    const cur=this.liveColors[this.selCell];
+    document.getElementById('swatchRow').innerHTML=Object.entries(FC).map(([k,fc])=>`
+      <div class="swatch ${cur===k?'on':''}" style="background:${fc.hex}"
+           onclick="app.setCell(${this.selCell},'${k}')" title="${fc.name}">${k}</div>`).join('');
+  }
+
+  setCell(i,k){this.liveColors[i]=k;this.renderMini(this.liveColors);this.renderSwatches();}
+
+  captureFace(){
+    const f=FACES[this.faceIdx];
+    if(this.liveColors.some(c=>!c)){this.showErr('Could not detect all 9 colors. Adjust lighting or tap cells to fix.');return;}
+    this.faces[f]=[...this.liveColors];this.faceIdx++;this.hideErr();this.selCell=null;
+    document.getElementById('pickerPanel').classList.remove('on');
+    if(this.faceIdx>=FACES.length){this.stopCam();this.showReview();}
+    else{this.renderDots();this.updateBanner();this.liveColors=Array(9).fill(null);this.renderMini(this.liveColors);}
+  }
+
+  skipFace(){
+    const f=FACES[this.faceIdx];
+    this.faces[f]=Array(9).fill(Object.keys(FC)[this.faceIdx]||'W');this.faceIdx++;
+    if(this.faceIdx>=FACES.length){this.stopCam();this.showReview();}
+    else{this.renderDots();this.updateBanner();this.liveColors=Array(9).fill(null);this.renderMini(this.liveColors);}
+  }
+
+  showErr(m){const e=document.getElementById('errBox');document.getElementById('errTxt').textContent=m;e.classList.add('on');e.style.display='flex';}
+  hideErr(){const e=document.getElementById('errBox');e.classList.remove('on');e.style.display='none';}
+
+  showReview(){this.show('review');this.renderNet();this.validateColors();}
+
+  renderNet(){
+    const rf=key=>{
+      const d=this.faces[key]||Array(9).fill('W');
+      return`<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+        <div style="font-size:.63rem;color:var(--muted);font-weight:700;letter-spacing:.08em">${key}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;width:62px">
+          ${d.map(c=>`<div style="aspect-ratio:1;background:${FC[c]?.hex||'#333'};border-radius:2px;border:1px solid rgba(0,0,0,.3)"></div>`).join('')}
+        </div></div>`;
+    };
+    document.getElementById('cubeNet').innerHTML=`<div style="display:grid;gap:8px">
+      <div style="display:flex;justify-content:center;padding-left:70px">${rf('U')}</div>
+      <div style="display:flex;gap:7px;justify-content:center">${rf('L')}${rf('F')}${rf('R')}${rf('B')}</div>
+      <div style="display:flex;justify-content:center;padding-left:70px">${rf('D')}</div>
+    </div>`;
+  }
+
+  validateColors(){
+    const all=Object.values(this.faces).flat(),cnt={};
+    all.forEach(c=>{cnt[c]=(cnt[c]||0)+1;});
+    const errs=[];
+    for(const[k,v] of Object.entries(cnt)) if(v!==9) errs.push(`${FC[k]?.name||k}: ${v}/9`);
+    Object.keys(FC).forEach(k=>{if(!cnt[k]) errs.push(`Missing ${FC[k].name}`);});
+    const box=document.getElementById('revErr');
+    if(errs.length){document.getElementById('revErrTxt').textContent=errs.join(', ')+' — solver will try anyway';box.style.display='flex';box.classList.add('on');}
+    else box.style.display='none';
+  }
+
+  goBackScan(){this.faceIdx=0;this.faces={};this.startScan();}
+
+  async solve(){
+    this.show('solving');
+    const msgs=['Analyzing cube state…','Running Kociemba search…','Pruning move tree…','Finalizing solution…'];
+    let mi=0;const sub=document.getElementById('solvSub');
+    const tm=setInterval(()=>{mi=(mi+1)%msgs.length;sub.textContent=msgs[mi];},1400);
+    try{
+      const sol=await this.callAPI();clearInterval(tm);
+      this.solution=sol;this.step=-1;this.showSol();
+    }catch(e){clearInterval(tm);sub.textContent='Error: '+e.message;setTimeout(()=>this.showReview(),3000);}
+  }
+
+  async callAPI(){
+    const{U,F,R,L,D,B}=this.faces;
+    const fs=a=>`${a[0]} ${a[1]} ${a[2]}\n${a[3]} ${a[4]} ${a[5]}\n${a[6]} ${a[7]} ${a[8]}`;
+    const prompt=`You are a world-class Rubik's cube solving expert using Kociemba's algorithm or equivalent optimal methods.
+
+Color codes: W=White, Y=Yellow, R=Red, O=Orange, B=Blue, G=Green
+
+Cube state (3x3 grid per face, reading left to right, top to bottom; center cell = face color):
+
+U (Top):
+${fs(U)}
+
+F (Front):
+${fs(F)}
+
+R (Right):
+${fs(R)}
+
+L (Left):
+${fs(L)}
+
+D (Bottom):
+${fs(D)}
+
+B (Back):
+${fs(B)}
+
+Orientation: U=top, F=front, R=right, L=left, D=bottom, B=back. Centers are fixed.
+
+Provide the SHORTEST possible solution using standard notation:
+- Face moves: U D R L F B (clockwise when looking at that face)
+- Prime: U' D' R' L' F' B' (counter-clockwise)
+- Double: U2 D2 R2 L2 F2 B2 (180 degrees)
+
+Reply with ONLY the move sequence separated by spaces. No explanation. No markdown.
+If already solved reply: SOLVED
+Example: R U R' U' F2 D2 L B'`;
+
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:prompt}]})
+    });
+    if(!res.ok) throw new Error(`API ${res.status}`);
+    const data=await res.json();
+    const txt=(data.content.find(b=>b.type==='text')?.text||'').trim();
+    if(txt==='SOLVED') return[];
+    const moves=txt.split(/\s+/).filter(m=>/^[UDRLFB]('|2)?$/.test(m));
+    if(!moves.length) throw new Error('Could not parse solution — please retry');
+    return moves;
+  }
+
+  showSol(){
+    this.show('solution');
+    document.getElementById('totalMv').textContent=this.solution.length;
+    document.getElementById('stepTotal').textContent=this.solution.length;
+    document.getElementById('stepNow').textContent='0';
+    if(!this.solution.length){
+      document.getElementById('movesList').innerHTML=`<div class="solved-msg">
+        <span style="stroke:var(--G)">${ic('checkCircle',60)}</span>
+        <div style="font-family:'Orbitron',sans-serif;font-size:1.4rem;font-weight:700">Already Solved!</div>
+        <div style="color:var(--muted);font-size:.9rem">Your cube is in the solved state.</div>
+      </div>`;
+      return;
+    }
+    this.renderMoves();this.updateProg();
+  }
+
+  renderMoves(){
+    document.getElementById('movesList').innerHTML=this.solution.map((mv,i)=>{
+      const info=MOVE_INFO[mv]||{face:mv[0],dir:'Clockwise',iconKey:'rotateCw',color:'#ffffff'};
+      const done=i<this.step,active=i===this.step;
+      return`<div class="move-card${done?' done':''}${active?' active':''}" id="mc${i}" onclick="app.goStep(${i})">
+        <div class="mv-num">${i+1}</div>
+        <div class="mv-icon" style="background:${info.color}18;border:1px solid ${info.color}30">
+          ${colorIc(info.iconKey,22,info.color)}
+        </div>
+        <div class="mv-notation" style="color:${info.color}">${mv}</div>
+        <div class="mv-info">
+          <div class="mv-face">${info.face} face</div>
+          <div class="mv-dir" style="color:${info.color}99">
+            ${colorIc(info.iconKey,11,info.color+'aa')}
+            ${info.dir}
+          </div>
+        </div>
+        <div class="mv-tick">${colorIc('check',11,'#fff')}</div>
+      </div>`;
+    }).join('');
+  }
+
+  goStep(i){this.step=i;this.syncMoves();this.updateProg();this.scrollActive();}
+  next(){if(this.step<this.solution.length-1){this.step++;this.syncMoves();this.updateProg();this.scrollActive();}}
+  prev(){if(this.step>-1){this.step--;this.syncMoves();this.updateProg();if(this.step>=0)this.scrollActive();}}
+  goEnd(){this.step=this.solution.length-1;this.syncMoves();this.updateProg();this.scrollActive();}
+
+  syncMoves(){
+    this.solution.forEach((_,i)=>{
+      const c=document.getElementById('mc'+i);if(!c)return;
+      c.className='move-card'+(i<this.step?' done':'')+(i===this.step?' active':'');
+    });
+    document.getElementById('stepNow').textContent=Math.max(0,this.step+1);
+  }
+
+  updateProg(){
+    const pct=this.solution.length?(this.step+1)/this.solution.length*100:0;
+    document.getElementById('progFill').style.width=pct+'%';
+  }
+
+  scrollActive(){
+    const el=document.getElementById('mc'+this.step);
+    if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+
+  togglePlay(){
+    const btn=document.getElementById('playBtn');
+    if(this.playing){
+      clearInterval(this.playTm);this.playTm=null;this.playing=false;
+      btn.innerHTML=I.play;
+    }else{
+      this.playing=true;btn.innerHTML=I.pause;
+      this.playTm=setInterval(()=>{
+        if(this.step>=this.solution.length-1){
+          clearInterval(this.playTm);this.playTm=null;this.playing=false;btn.innerHTML=I.play;return;
+        }
+        this.next();
+      },900);
+    }
+  }
+
+  restart(){
+    if(this.playing){clearInterval(this.playTm);this.playing=false;}
+    this.stopCam();this.faceIdx=0;this.faces={};this.solution=[];this.step=-1;
+    this.liveColors=Array(9).fill(null);this.selCell=null;this.show('splash');
+  }
+}
+
+const app=new App();
+</script>
+</body>
+</html>
