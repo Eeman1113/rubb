@@ -186,13 +186,26 @@ body::before{
   background: #000;
   align-self: center;
 }
-#videoEl{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+#videoEl{width:100%;height:100%;object-fit:cover;}
+/* front cam gets mirrored via JS class */
+#videoEl.mirror{transform:scaleX(-1)}
 #gridCvs{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.corner{position:absolute;width:18px;height:18px;border-color:var(--acc);border-style:solid;border-width:0;opacity:.9}
+.corner{position:absolute;width:18px;height:18px;border-color:var(--acc);border-style:solid;border-width:0;opacity:.9;transition:border-color .3s}
 .corner.tl{top:8px;left:8px;border-top-width:3px;border-left-width:3px}
 .corner.tr{top:8px;right:8px;border-top-width:3px;border-right-width:3px}
 .corner.bl{bottom:8px;left:8px;border-bottom-width:3px;border-left-width:3px}
 .corner.br{bottom:8px;right:8px;border-bottom-width:3px;border-right-width:3px}
+.cam-wrap.locked{border-color:rgba(16,185,129,.5)}
+.cam-wrap.locked .corner{border-color:var(--G)}
+.detect-badge{
+  position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  background:rgba(16,185,129,.85);color:#fff;
+  font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:4px 12px;border-radius:20px;backdrop-filter:blur(6px);
+  opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;
+  font-family:'Barlow',sans-serif;
+}
+.cam-wrap.locked .detect-badge{opacity:1}
 
 /* preview row */
 .color-row{display:flex;align-items:center;gap:12px;flex-shrink:0}
@@ -448,6 +461,7 @@ body::before{
       <canvas id="gridCvs"></canvas>
       <div class="corner tl"></div><div class="corner tr"></div>
       <div class="corner bl"></div><div class="corner br"></div>
+      <div class="detect-badge" id="detectBadge">✦ Cube Locked</div>
     </div>
     <div class="color-row">
       <div class="color-row-lbl">
@@ -703,35 +717,164 @@ class App {
   }
 
   startLive(){
-    const v=document.getElementById('videoEl'),cvs=document.getElementById('gridCvs'),wrap=document.getElementById('camWrap');
-    const draw=()=>{
-      if(!this.stream)return;
-      const W=wrap.offsetWidth,H=wrap.offsetHeight;cvs.width=W;cvs.height=H;
-      const ctx=cvs.getContext('2d');
-      const mg=Math.floor(W*.1),gw=W-mg*2,gh=H-mg*2,cw=gw/3,ch=gh/3;
-      ctx.clearRect(0,0,W,H);
-      ctx.strokeStyle='rgba(108,99,255,.72)';ctx.lineWidth=1.5;
-      for(let i=0;i<=3;i++){
-        const x=mg+i*cw,y=mg+i*ch;
-        ctx.beginPath();ctx.moveTo(x,mg);ctx.lineTo(x,mg+gh);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(mg,y);ctx.lineTo(mg+gw,y);ctx.stroke();
+    const v=document.getElementById('videoEl');
+    const cvs=document.getElementById('gridCvs');
+    const wrap=document.getElementById('camWrap');
+
+    // Mirror only for front camera
+    const track = this.stream.getVideoTracks()[0];
+    const settings = track ? track.getSettings() : {};
+    const isFront = settings.facingMode === 'user';
+    v.classList.toggle('mirror', isFront);
+
+    // Offscreen canvas for pixel sampling — always unmirrored
+    const off = document.createElement('canvas');
+    const ox  = off.getContext('2d');
+
+    // Smooth grid position: starts at 10% margin, lerps toward detected cube
+    let gx=0, gy=0, gw=0, gh=0;  // current grid rect (in canvas px), 0=uninit
+    let locked = false;
+    let lockFrames = 0;            // consecutive frames with a good detection
+    const LOCK_THRESH = 8;         // frames before we call it "locked"
+    const LERP = 0.12;             // smoothing factor
+
+    const draw = () => {
+      if(!this.stream) return;
+      const W=wrap.offsetWidth, H=wrap.offsetHeight;
+      cvs.width=W; cvs.height=H;
+      off.width=W; off.height=H;
+      const ctx = cvs.getContext('2d');
+
+      // Draw unmirrored frame to offscreen canvas for sampling
+      if(isFront){
+        ox.save(); ox.translate(W,0); ox.scale(-1,1);
+        ox.drawImage(v,0,0,W,H); ox.restore();
+      } else {
+        ox.drawImage(v,0,0,W,H);
       }
-      ctx.fillStyle='rgba(255,255,255,.55)';
-      for(let r=0;r<3;r++)for(let c=0;c<3;c++){ctx.beginPath();ctx.arc(mg+c*cw+cw/2,mg+r*ch+ch/2,2.5,0,Math.PI*2);ctx.fill();}
-      const off=document.createElement('canvas');off.width=W;off.height=H;
-      const ox=off.getContext('2d');ox.save();ox.translate(W,0);ox.scale(-1,1);ox.drawImage(v,0,0,W,H);ox.restore();
-      this.liveColors=this.sample(ox,W,H,mg,cw,ch);this.renderMini(this.liveColors);
-      this.raf=requestAnimationFrame(draw);
+
+      // ── Auto-detect the cube face ──
+      const det = this.detectCube(ox, W, H);
+
+      // initialise grid on first frame
+      if(!gw){ const mg=Math.floor(W*.1); gx=mg; gy=mg; gw=W-mg*2; gh=H-mg*2; }
+
+      if(det){
+        // Lerp grid toward detected region
+        gx += (det.x - gx) * LERP;
+        gy += (det.y - gy) * LERP;
+        gw += (det.w - gw) * LERP;
+        gh += (det.h - gh) * LERP;
+        lockFrames = Math.min(lockFrames+1, LOCK_THRESH+5);
+      } else {
+        // Drift back toward centre default when nothing detected
+        const mg=Math.floor(W*.1), dw=W-mg*2, dh=H-mg*2;
+        gx += (mg - gx) * LERP * 0.3;
+        gy += (mg - gy) * LERP * 0.3;
+        gw += (dw - gw) * LERP * 0.3;
+        gh += (dh - gh) * LERP * 0.3;
+        lockFrames = Math.max(lockFrames-2, 0);
+      }
+
+      const wasLocked = locked;
+      locked = lockFrames >= LOCK_THRESH;
+      wrap.classList.toggle('locked', locked);
+
+      // ── Draw grid overlay ──
+      const cw=gw/3, ch=gh/3;
+      ctx.clearRect(0,0,W,H);
+
+      // Dim outside the grid slightly
+      ctx.fillStyle='rgba(0,0,0,.32)';
+      ctx.fillRect(0,0,W,gx);                           // top bar
+      ctx.fillRect(0,gy+gh,W,H-gy-gh);                  // bottom bar
+      ctx.fillRect(0,gy,gx,gh);                          // left bar
+      ctx.fillRect(gx+gw,gy,W-gx-gw,gh);                // right bar
+
+      // Grid lines
+      const lineColor = locked ? 'rgba(16,185,129,.8)' : 'rgba(108,99,255,.75)';
+      ctx.strokeStyle = lineColor; ctx.lineWidth = locked ? 2 : 1.5;
+      for(let i=0;i<=3;i++){
+        const x=gx+i*cw, y=gy+i*ch;
+        ctx.beginPath();ctx.moveTo(x,gy);ctx.lineTo(x,gy+gh);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(gx,y);ctx.lineTo(gx+gw,y);ctx.stroke();
+      }
+
+      // Centre dots per cell
+      ctx.fillStyle = locked ? 'rgba(16,185,129,.7)' : 'rgba(255,255,255,.5)';
+      for(let r=0;r<3;r++) for(let c=0;c<3;c++){
+        ctx.beginPath();
+        ctx.arc(gx+c*cw+cw/2, gy+r*ch+ch/2, locked?3:2.5, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      // Sample colors from inside the grid cells
+      this.liveColors = this.sample(ox, gx, gy, cw, ch);
+      this.renderMini(this.liveColors);
+
+      this.raf = requestAnimationFrame(draw);
     };
-    this.raf=requestAnimationFrame(draw);
+    this.raf = requestAnimationFrame(draw);
   }
 
-  sample(ctx,W,H,mg,cw,ch){
+  // ── Scan the frame for cube-colored pixels and return a bounding box ──
+  detectCube(ctx, W, H){
+    // Coarse scan: 28×28 grid across the full frame
+    const STEP = Math.floor(Math.min(W,H)/28);
+    const THRESH = 90;   // max color distance to qualify as "cube color"
+    const pts = [];
+
+    for(let py=STEP;py<H-STEP;py+=STEP){
+      for(let px=STEP;px<W-STEP;px+=STEP){
+        const px4=ctx.getImageData(px,py,1,1).data;
+        const r=px4[0],g=px4[1],b=px4[2];
+        let best=Infinity;
+        for(const[,[cr,cg,cb]] of Object.entries(FC_RGB)){
+          const d=(r-cr)**2+(g-cg)**2+(b-cb)**2;
+          if(d<best) best=d;
+        }
+        if(best < THRESH*THRESH) pts.push([px,py]);
+      }
+    }
+
+    if(pts.length < 16) return null;  // not enough cube-colored pixels
+
+    // Find bounding box of matching pixels
+    let x0=W,y0=H,x1=0,y1=0;
+    for(const[px,py] of pts){
+      if(px<x0)x0=px; if(px>x1)x1=px;
+      if(py<y0)y0=py; if(py>y1)y1=py;
+    }
+
+    const bw=x1-x0, bh=y1-y0;
+    // Must be somewhat square and cover at least 15% of frame
+    const minSize = Math.min(W,H)*0.15;
+    if(bw<minSize || bh<minSize) return null;
+    const ratio = Math.max(bw,bh)/Math.min(bw,bh);
+    if(ratio>2.2) return null;  // too elongated
+
+    // Make it square, centred on the bounding box
+    const side = Math.max(bw,bh);
+    const cx=(x0+x1)/2, cy=(y0+y1)/2;
+    const pad = side*0.08;  // small padding around the face
+    const sx = cx-side/2-pad, sy = cy-side/2-pad;
+    const sw = side+pad*2, sh = side+pad*2;
+
+    // Clamp to frame
+    const fx = Math.max(4, sx);
+    const fy = Math.max(4, sy);
+    const fw = Math.min(sw, W-fx-4);
+    const fh = Math.min(sh, H-fy-4);
+
+    return {x:fx, y:fy, w:fw, h:fh};
+  }
+
+  sample(ctx, gx, gy, cw, ch){
     return Array.from({length:9},(_,i)=>{
-      const r=Math.floor(i/3),c=i%3;
-      const cx=Math.floor(mg+c*cw+cw/2),cy=Math.floor(mg+r*ch+ch/2);
-      const sz=Math.max(6,Math.floor(cw*.18));
-      const x=Math.max(0,cx-sz/2),y=Math.max(0,cy-sz/2);
+      const r=Math.floor(i/3), c=i%3;
+      const cx=Math.floor(gx+c*cw+cw/2), cy=Math.floor(gy+r*ch+ch/2);
+      const sz=Math.max(5,Math.floor(Math.min(cw,ch)*.18));
+      const x=Math.max(0,cx-sz/2), y=Math.max(0,cy-sz/2);
       const id=ctx.getImageData(x,y,sz,sz);
       let sr=0,sg=0,sb=0,n=id.data.length/4;
       for(let j=0;j<id.data.length;j+=4){sr+=id.data[j];sg+=id.data[j+1];sb+=id.data[j+2];}
